@@ -1,10 +1,10 @@
 <script lang="ts">
-	import { getNotes } from "../Api";
+	import { api } from "../Api/Api";
 	import { onMount } from "svelte";
 
 	let searchResults = [""];
 	async function fetchItems() {
-		searchResults = await getNotes();
+		searchResults = []; // await api("asd").me();
 	}
 
 	onMount(() => {

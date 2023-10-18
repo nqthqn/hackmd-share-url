@@ -5,83 +5,65 @@ import {
 	Plugin,
 	PluginSettingTab,
 	Setting,
-	SuggestModal,
 } from "obsidian";
 
 import type { PluginManifest } from "obsidian";
-
-import { publishAndGetLink } from "./Api";
-import type { ApiFn } from "./Api";
+import { api } from "./Api/Api";
 
 interface MyPluginSettings {
-	api_key: string;
+	API_KEY: string;
 }
 
 const DEFAULT_SETTINGS: MyPluginSettings = {
-	api_key: "",
+	API_KEY: "",
 };
-
-function makeCommand(
-	app: App,
-	commandName: string,
-	apiFn: ApiFn,
-	token: string
-) {
-	return {
-		id: `My-${commandName.toLowerCase().replace(" ", "-")}`,
-		name: commandName,
-		editorCallback: async (editor: Editor) => {
-			if (token.length == 0) {
-				new Notice(`First set the API token in plugin settings.`);
-				return;
-			}
-			// Get contents of the current markdown document
-			const content = editor.getDoc().getValue();
-			if (content != "") {
-				// Share it to HackMD and get back a Share URL
-				const shareUrl = await apiFn(content, "guest", token);
-				if (shareUrl.length == 0) {
-					new Notice(`Oops — No content.`);
-					return;
-				}
-				// Paste this into your clipboard.
-				navigator.clipboard.writeText(shareUrl);
-			} else {
-				new Notice(`Oops — Select a word first.`);
-			}
-		},
-	};
-}
 
 export default class MyPlugin extends Plugin {
 	settings: MyPluginSettings = {
-		api_key: "",
+		API_KEY: "",
 	};
-
 	constructor(app: App, manifest: PluginManifest) {
 		super(app, manifest);
 	}
 
-	// Initial plugin setup, configure all the resources needed by the plugin
 	async onload() {
 		await this.loadSettings();
-
 		this.registerView(VIEW_ID, (leaf) => new MyView(leaf));
 		this.addRibbonIcon("messages-square", "Recent Notes", () => {
 			this.activateView();
 		});
 
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand(
-			makeCommand(
-				this.app,
-				"Publish to HackMD",
-				publishAndGetLink,
-				this.settings.api_key
-			)
-		);
+		this.addCommand({
+			id: `hackmd-publish`,
+			name: "Share",
+			editorCallback: async (editor: Editor) => {
+				// First check
+				const content = editor.getDoc().getValue();
+				if (this.settings.API_KEY.length == 0) {
+					new Notice(`API key missing`);
+					return;
+				}
+				if (content == "") {
+					new Notice("Missing content");
+					return;
+				}
+				const HackMd = api(this.settings.API_KEY);
+				const note = await HackMd.publish(content);
+				// const me = await HackMd.me();
+				// if (me && note) {
+				// 	const comments = await HackMd.comments(
+				// 		me.userPath,
+				// 		note.shortId
+				// 	);
+				// 	console.log(comments);
+				// }
+				if (note) {
+					navigator.clipboard.writeText(note.publishLink);
+					new Notice("Share link copied to clipboard");
+				}
+			},
+		});
 
-		// This adds a settings tab so the user can configure various aspects of the plugin
 		this.addSettingTab(new MyPluginSettingTab(this.app, this));
 	}
 	async activateView() {
@@ -107,10 +89,9 @@ export default class MyPlugin extends Plugin {
 
 	async saveSettings() {
 		await this.saveData(this.settings);
+		await this.loadSettings();
 	}
 }
-
-// My View
 import { ItemView, WorkspaceLeaf } from "obsidian";
 import RecentlyShared from "./components/RecentlyShared.svelte";
 
@@ -134,14 +115,11 @@ export class MyView extends ItemView {
 	async onOpen() {
 		this.component = new RecentlyShared({
 			target: this.containerEl.children[1],
-			props: {
-				variable: 42,
-			},
+			props: {},
 		});
 	}
 
 	async onClose() {
-		// Kill the svelte app
 		this.component.$destroy();
 	}
 }
@@ -163,22 +141,25 @@ class MyPluginSettingTab extends PluginSettingTab {
 
 		containerEl.empty();
 		containerEl.createEl("h2", { text: "Settings" });
+		containerEl.createEl("p", {
+			text: "To interact with your HackMD account create an access token.",
+		});
 		containerEl.createEl("a", {
-			text: "Generate HackMD API Token",
+			text: "Create access token",
 			href: "https://hackmd.io/settings#api",
 		});
 
 		new Setting(containerEl)
-			.setName("API Token")
+			.setName("Access Token")
 			.setDesc(
 				"Free plan includes call limit of 2000. Call limit resets every 30 days."
 			)
 			.addText((text) =>
 				text
-					.setPlaceholder("3MGC...LRI")
-					.setValue(this.plugin.settings.api_key)
+					.setPlaceholder("Paste token here")
+					.setValue(this.plugin.settings.API_KEY)
 					.onChange(async (value) => {
-						this.plugin.settings.api_key = value;
+						this.plugin.settings.API_KEY = value;
 						await this.plugin.saveSettings();
 					})
 			);
