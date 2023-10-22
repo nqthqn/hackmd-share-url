@@ -1,71 +1,116 @@
-import {
-	App,
-	Editor,
-	Notice,
-	Plugin,
-	PluginSettingTab,
-	Setting,
+import { App, Editor, Notice, Plugin } from "obsidian";
+
+import type {
+	MarkdownFileInfo,
+	MarkdownView,
+	PluginManifest,
+	TFile,
 } from "obsidian";
-
-import type { PluginManifest } from "obsidian";
-import { api } from "./Api/Api";
-
+import { api, type Api } from "./Api/Api";
+import { HackMdSettingsTab } from "HackMdSettingsTab";
+import { HackMdPaneItemView } from "HackMdPaneItemView";
+import store from "store";
+export const VIEW_ID = "hackmd-view";
+export const VIEW_ICON = "messages-square";
+const HACKMD_PROP_NAME = "hackMdPublishLink";
 interface MyPluginSettings {
 	API_KEY: string;
 }
-
 const DEFAULT_SETTINGS: MyPluginSettings = {
 	API_KEY: "",
 };
 
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings = {
-		API_KEY: "",
-	};
+// THE HACK MD PLUGIN
+
+export default class HackMdPlugin extends Plugin {
 	constructor(app: App, manifest: PluginManifest) {
 		super(app, manifest);
 	}
 
+	settings: MyPluginSettings = {
+		API_KEY: "",
+	};
+
+	getHackMdPublishLink(file: TFile): string {
+		const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
+		if (fm && fm[HACKMD_PROP_NAME]) {
+			return fm[HACKMD_PROP_NAME];
+		}
+		return "";
+	}
+
+	async setHackMdPublishLink(file: TFile, link: string): Promise<void> {
+		await this.app.fileManager.processFrontMatter(
+			file,
+			(fm) => (fm[HACKMD_PROP_NAME] = link)
+		);
+	}
+
 	async onload() {
-		await this.loadSettings();
-		this.registerView(VIEW_ID, (leaf) => new MyView(leaf));
-		this.addRibbonIcon("messages-square", "Recent Notes", () => {
-			this.activateView();
+		// Setup API client from access token in settings
+		const hackMdApi = await this.loadApiWithSettings();
+
+		// Register the view
+		this.registerAndActivePane(hackMdApi);
+
+		store.plugin.set(store.init(hackMdApi));
+
+		const file = this.app.workspace.getActiveFile();
+		if (file) {
+			const activeFilePublishUrl = this.getHackMdPublishLink(file);
+			store.plugin.update((state) => ({
+				...state,
+				activeFilePublishUrl,
+			}));
+		}
+		// Update the store whenever the active file changes
+		this.app.workspace.on("file-open", (file) => {
+			if (file) {
+				const activeFilePublishUrl = this.getHackMdPublishLink(file);
+				if (activeFilePublishUrl) {
+					store.plugin.update((state) => ({
+						...state,
+						activeFilePublishUrl,
+					}));
+				}
+			}
 		});
 
+		// Register commands
 		this.addCommand({
 			id: `hackmd-publish`,
-			name: "Share",
-			editorCallback: async (editor: Editor) => {
-				// First check
+			name: "Publish",
+			editorCallback: async (
+				editor: Editor,
+				ctx: MarkdownView | MarkdownFileInfo
+			) => {
+				//  Guards
+				if (!ctx.file) return;
+
+				// Check if note has already been published
+				const link = this.getHackMdPublishLink(ctx.file);
+				if (link) {
+					navigator.clipboard.writeText(link);
+					new Notice(
+						"Already published, link copied from file properties."
+					);
+					return;
+				}
+
 				const content = editor.getDoc().getValue();
-				if (this.settings.API_KEY.length == 0) {
-					new Notice(`API key missing`);
-					return;
-				}
-				if (content == "") {
-					new Notice("Missing content");
-					return;
-				}
-				const HackMd = api(this.settings.API_KEY);
-				const note = await HackMd.publish(content);
-				// const me = await HackMd.me();
-				// if (me && note) {
-				// 	const comments = await HackMd.comments(
-				// 		me.userPath,
-				// 		note.shortId
-				// 	);
-				// 	console.log(comments);
-				// }
+				const note = await hackMdApi.createNote(content);
+
 				if (note) {
-					navigator.clipboard.writeText(note.publishLink);
-					new Notice("Share link copied to clipboard");
+					this.setHackMdPublishLink(ctx.file, note.publishLink);
+					await navigator.clipboard.writeText(note.publishLink);
+					new Notice(note.publishLink);
 				}
 			},
 		});
 
-		this.addSettingTab(new MyPluginSettingTab(this.app, this));
+		this.addSettingTab(new HackMdSettingsTab(this.app, this));
 	}
+
 	async activateView() {
 		this.app.workspace.detachLeavesOfType(VIEW_ID);
 
@@ -90,78 +135,24 @@ export default class MyPlugin extends Plugin {
 	async saveSettings() {
 		await this.saveData(this.settings);
 		await this.loadSettings();
-	}
-}
-import { ItemView, WorkspaceLeaf } from "obsidian";
-import RecentlyShared from "./components/RecentlyShared.svelte";
-
-export const VIEW_ID = "hackmd-recently-shared";
-
-export class MyView extends ItemView {
-	component: RecentlyShared;
-
-	constructor(leaf: WorkspaceLeaf) {
-		super(leaf);
+		const hackMdApi = api(this.settings.API_KEY);
+		// TODO: Use this api
+		store.plugin.update((state) => ({ ...state, hackMdApi }));
 	}
 
-	getViewType() {
-		return VIEW_ID;
+	async loadApiWithSettings() {
+		await this.loadSettings();
+		this.saveSettings();
+		return api(this.settings.API_KEY);
 	}
 
-	getDisplayText() {
-		return "Recently Shared";
-	}
-
-	async onOpen() {
-		this.component = new RecentlyShared({
-			target: this.containerEl.children[1],
-			props: {},
+	registerAndActivePane(hackMdApi: Api) {
+		this.registerView(
+			VIEW_ID,
+			(leaf) => new HackMdPaneItemView(leaf, hackMdApi)
+		);
+		this.addRibbonIcon(VIEW_ICON, "HackMD", () => {
+			this.activateView();
 		});
-	}
-
-	async onClose() {
-		this.component.$destroy();
-	}
-}
-
-/**
- * Setting Pane
- */
-
-class MyPluginSettingTab extends PluginSettingTab {
-	plugin: MyPlugin;
-
-	constructor(app: App, plugin: MyPlugin) {
-		super(app, plugin);
-		this.plugin = plugin;
-	}
-
-	display(): void {
-		const { containerEl } = this;
-
-		containerEl.empty();
-		containerEl.createEl("h2", { text: "Settings" });
-		containerEl.createEl("p", {
-			text: "To interact with your HackMD account create an access token.",
-		});
-		containerEl.createEl("a", {
-			text: "Create access token",
-			href: "https://hackmd.io/settings#api",
-		});
-
-		new Setting(containerEl)
-			.setName("Access Token")
-			.setDesc(
-				"Free plan includes call limit of 2000. Call limit resets every 30 days."
-			)
-			.addText((text) =>
-				text
-					.setPlaceholder("Paste token here")
-					.setValue(this.plugin.settings.API_KEY)
-					.onChange(async (value) => {
-						this.plugin.settings.API_KEY = value;
-						await this.plugin.saveSettings();
-					})
-			);
 	}
 }
