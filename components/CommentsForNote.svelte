@@ -10,12 +10,14 @@
 	let hackMdPublishLink: string;
 
 	store.plugin.subscribe((state) => {
+		console.log(state.activeFilePublishUrl);
 		hackMdPublishLink = state.activeFilePublishUrl;
 		fetchItems();
 	});
 
 	async function fetchItems() {
 		commenting = undefined;
+		console.log(hackMdPublishLink);
 		if (!hackMdPublishLink || !hackMdPublishLink.startsWith("http")) return;
 		let noteShortId = hackMdPublishLink.split("/").last();
 		commenting = await hackMdApi.getComments(noteShortId!);
@@ -35,7 +37,7 @@
 	<h3>Comments</h3>
 	{#if hackMdPublishLink}
 		<p>
-			Published <a href={hackMdPublishLink}>here</a>.
+			Shared <a href={hackMdPublishLink}>here</a>.
 		</p>
 	{/if}
 

@@ -63,10 +63,20 @@ export default class HackMdPlugin extends Plugin {
 				activeFilePublishUrl,
 			}));
 		}
-		// Update the store whenever the active file changes
-		this.app.workspace.on("file-open", (file) => {
+
+		this.app.workspace.on("active-leaf-change", (leaf) => {
+			if (leaf?.view.getViewType() != "markdown") return;
+
+			const file = this.app.workspace.activeEditor?.file;
+			let fm = undefined;
+
 			if (file) {
-				const activeFilePublishUrl = this.getHackMdPublishLink(file);
+				fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
+			}
+
+			if (fm && fm[HACKMD_PROP_NAME]) {
+				const activeFilePublishUrl = fm[HACKMD_PROP_NAME];
+				// console.log(activeFilePublishUrl);
 				if (activeFilePublishUrl) {
 					store.plugin.update((state) => ({
 						...state,
@@ -136,7 +146,6 @@ export default class HackMdPlugin extends Plugin {
 		await this.saveData(this.settings);
 		await this.loadSettings();
 		const hackMdApi = api(this.settings.API_KEY);
-		// TODO: Use this api
 		store.plugin.update((state) => ({ ...state, hackMdApi }));
 	}
 

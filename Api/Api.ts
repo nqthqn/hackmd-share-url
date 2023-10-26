@@ -79,6 +79,9 @@ export const api = (token: string): Api => {
 				new Notice(`API — ${error}.`);
 				return undefined;
 			}
+			console.log(
+				`https://hackmd.io/@${userPath}/${noteShortId}/readAllComment`
+			);
 
 			url = endpoint(
 				`@${userPath}/${noteShortId}/readAllComment`,
