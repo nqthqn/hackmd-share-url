@@ -14,5 +14,5 @@ Add your [HackMD API key](https://hackmd.io/settings#api) to the plugin settings
 ## Development
 - Install [hot-reload](https://github.com/pjeby/hot-reload).
 - Clone this project into `.obsidian/plugins`
-- Run `npm i && npm run dev`
+- Run `npm i && npm start`
 - Explore the code and have fun!
