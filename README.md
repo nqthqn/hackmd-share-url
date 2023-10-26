@@ -11,7 +11,7 @@ Add your [HackMD API key](https://hackmd.io/settings#api) to the plugin settings
 -   2-way sync with CRDT
 -   Use more of the available API surface area
 
-## Devlopment
+## Development
 - Install [hot-reload](https://github.com/pjeby/hot-reload).
 - Clone this project into `.obsidian/plugins`
 - Run `npm i && npm run dev`
