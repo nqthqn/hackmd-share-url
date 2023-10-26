@@ -8,14 +8,20 @@
 
 	let commenting: ReadAllComments | undefined = undefined;
 	let hackMdPublishLink: string;
+	let timer: NodeJS.Timeout;
+
+	const debounce = (fn: () => void) => {
+		clearTimeout(timer);
+		timer = setTimeout(fn, 750);
+	};
 
 	store.plugin.subscribe((state) => {
-		console.log(state.activeFilePublishUrl);
 		hackMdPublishLink = state.activeFilePublishUrl;
-		fetchItems();
+		debounce(fetchItems);
 	});
 
 	async function fetchItems() {
+		console.log("called");
 		commenting = undefined;
 		console.log(hackMdPublishLink);
 		if (!hackMdPublishLink || !hackMdPublishLink.startsWith("http")) return;
@@ -24,8 +30,8 @@
 	}
 
 	function userById(id: string, users: Profile[]) {
-		return "todo";
-		// return users.filter((u) => (u.id = id))[0].email;
+		const matches = users.filter((u) => (u.id = id));
+		return matches ? matches[0].email : "Anonymous";
 	}
 
 	onMount(() => {
