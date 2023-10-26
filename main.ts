@@ -76,7 +76,6 @@ export default class HackMdPlugin extends Plugin {
 
 			if (fm && fm[HACKMD_PROP_NAME]) {
 				const activeFilePublishUrl = fm[HACKMD_PROP_NAME];
-				// console.log(activeFilePublishUrl);
 				if (activeFilePublishUrl) {
 					store.plugin.update((state) => ({
 						...state,
